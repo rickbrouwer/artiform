@@ -1,0 +1,25 @@
+# Owned by team Y (protect with CODEOWNERS); may only define 'projects:'.
+projects:
+  team-y:
+    display_name: "Team Y"
+    repositories:
+      enforce: true
+      generate:
+        package_types: [maven, docker]
+        maturities: [dev, prod]
+      # Shared with the platform project so the cluster virtuals
+      # (shared-docker-*-virtual in the main file) may include them.
+      team-y-docker-dev-local:
+        share_with:
+          projects: [shared]
+          read_only: true
+      team-y-docker-prod-local:
+        share_with:
+          projects: [shared]
+          read_only: true
+    members:
+      enforce: true
+      groups:
+        team-y-developers:
+          import_from_ldap: corporate-ldap-groups
+          roles: [Developer]

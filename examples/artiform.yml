@@ -1,0 +1,109 @@
+config_version: 1
+
+artifactory:
+  url: https://artifactory.example.com
+  # The admin access token (reference or identity token) comes from the
+  # ARTIFACTORY_TOKEN CI variable; it can also be set here as 'token' for
+  # local testing.
+
+# Delete projects that exist in Artifactory but are not listed below.
+# Their repositories (including all artifacts!) are deleted first.
+enforce_projects: false
+
+defaults:
+  project:
+    admin_privileges:
+      manage_members: true
+      manage_resources: true
+      index_resources: true
+  cleanup_policy:
+    duration_in_minutes: 120
+    skip_trashcan: false
+
+projects:
+  team-x:
+    display_name: "Team X"
+    description: "Managed by artiform"
+    storage_quota_bytes: -1
+
+    repositories:
+      enforce: true          # repos of this project not listed here are deleted
+      # Expands to team-x-<tech>-<maturity>-local per combination, following
+      # the JFrog naming convention; dev repos get the DEV environment,
+      # prod repos get PROD.
+      generate:
+        package_types: [maven, npm, helmoci, docker]
+        maturities: [dev, prod]
+      # Explicit repos can be added next to the generated ones, or override
+      # a generated repo by using its exact key. Any field of the repository
+      # configuration REST API works (snake_case); some common ones:
+      team-x-maven-prod-local:
+        xray_index: true
+        description: "Team X releases"
+        includes_pattern: "com/example/**" # only accept these paths
+        excludes_pattern: "**/*-tmp/**"    # ... except these
+        max_unique_snapshots: 10
+      team-x-docker-remote:
+        type: remote
+        package_type: docker
+        url: https://registry-1.docker.io
+        # Upstream credentials from (masked) CI variables; $VAR / ${VAR} in
+        # any string value is substituted at load time and the run aborts if
+        # the variable is not set.
+        username: $DOCKER_REMOTE_USERNAME
+        password: $DOCKER_REMOTE_PASSWORD
+      team-x-npm-remote:
+        type: remote
+        package_type: npm
+        url: https://registry.npmjs.org
+        # Optional: share this repo with other projects (authoritative list;
+        # read_only defaults to true and applies to the sharing as a whole).
+        share_with:
+          projects: [team-y]
+          read_only: false   # lets consumers trigger upstream fetches
+
+    members:
+      enforce: true          # memberships not listed here are removed
+      groups:
+        team-x-developers:
+          import_from_ldap: corporate-ldap-groups   # name of the LDAP group setting
+          roles: [Developer]
+        team-x-release:
+          import_from_ldap: corporate-ldap-groups
+          roles: [Release Manager]
+      users:
+        alice:
+          roles: [Project Admin]
+
+    cleanup_policies:
+      enforce: true          # policies of this project not listed here are deleted
+      # Expands to one policy per package type and rule, e.g.
+      # team-x-maven-dev-prerelease-14d, targeting the generated repo of the
+      # rule's maturity (team-x-maven-dev-local). Rule fields other than
+      # 'maturity' are merged into the policy as-is.
+      # Note: included_package_versions requires Artifactory >= 7.125.7.
+      generate:
+        package_types: [maven, npm, helmoci, docker]
+        rules:
+          dev-prerelease-14d:
+            maturity: dev
+            description: "Dev pre-releases (*-*): delete after 14d old and 14d not downloaded"
+            cron_exp: "0 0 1 * * ?"      # daily at 01:00
+            search_criteria:
+              included_package_versions: ["*-*"]
+              created_before_in_days: 14
+              last_downloaded_before_in_days: 14
+          dev-all-90d:
+            maturity: dev
+            description: "Dev all versions (incl. stable and latest): delete after 90d/90d"
+            cron_exp: "0 0 2 * * ?"      # daily at 02:00
+            search_criteria:
+              created_before_in_days: 90
+              last_downloaded_before_in_days: 90
+          prod-365d:
+            maturity: prod
+            description: "Prod all versions: delete after 365d/365d"
+            cron_exp: "0 0 3 ? * 1"      # weekly, Sunday at 03:00
+            search_criteria:
+              created_before_in_days: 365
+              last_downloaded_before_in_days: 365

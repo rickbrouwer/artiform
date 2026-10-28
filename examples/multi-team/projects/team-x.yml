@@ -1,0 +1,49 @@
+# Owned by team X (protect with CODEOWNERS); may only define 'projects:'.
+projects:
+  team-x:
+    display_name: "Team X"
+    repositories:
+      enforce: true
+      generate:
+        package_types: [maven, npm, helmoci, docker]
+        maturities: [dev, prod]
+      # Shared with the platform project so the cluster virtuals
+      # (shared-docker-*-virtual in the main file) may include them.
+      team-x-docker-dev-local:
+        share_with:
+          projects: [shared]
+          read_only: true
+      team-x-docker-prod-local:
+        share_with:
+          projects: [shared]
+          read_only: true
+    members:
+      enforce: true
+      groups:
+        team-x-developers:
+          import_from_ldap: corporate-ldap-groups
+          roles: [Developer]
+    cleanup_policies:
+      enforce: true
+      generate:
+        package_types: [maven, npm, helmoci, docker]
+        rules:
+          dev-prerelease-14d:
+            maturity: dev
+            cron_exp: "0 0 1 * * ?"
+            search_criteria:
+              included_package_versions: ["*-*"]
+              created_before_in_days: 14
+              last_downloaded_before_in_days: 14
+          dev-all-90d:
+            maturity: dev
+            cron_exp: "0 0 2 * * ?"
+            search_criteria:
+              created_before_in_days: 90
+              last_downloaded_before_in_days: 90
+          prod-365d:
+            maturity: prod
+            cron_exp: "0 0 3 ? * 1"
+            search_criteria:
+              created_before_in_days: 365
+              last_downloaded_before_in_days: 365

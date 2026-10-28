@@ -1,0 +1,83 @@
+# Main config: platform-owned settings only. Teams never touch this file.
+config_version: 1
+
+artifactory:
+  url: https://artifactory.example.com
+
+# Safe together with include_projects: enforce sees the union of ALL files,
+# and any broken or missing team file aborts the run before anything is
+# deleted.
+enforce_projects: true
+
+# Note: do not set repository defaults that virtual repositories cannot
+# carry (such as environments); defaults merge into every repository.
+defaults:
+  cleanup_policy:
+    duration_in_minutes: 120
+
+# One file per team under projects/; each file may only contain 'projects:'.
+include_projects: projects/*.yml
+
+# Platform-owned projects live in this main file, so teams cannot change
+# them. The 'shared' project owns the central remotes that teams consume;
+# see docs/reference/repositories.md for the reasoning behind this setup.
+projects:
+  shared:
+    display_name: "Shared repositories (platform)"
+    repositories:
+      enforce: true
+      # Universal remotes: shared with every project, including future ones.
+      # read_only: false so consumers can trigger upstream fetches of
+      # artifacts that are not cached yet (required on Artifactory < 7.173).
+      shared-docker-remote:
+        type: remote
+        package_type: docker
+        url: https://registry-1.docker.io
+        username: $DOCKER_REMOTE_USERNAME   # masked CI variables
+        password: $DOCKER_REMOTE_PASSWORD
+        share_with:
+          all: true
+          read_only: false
+      shared-npm-remote:
+        type: remote
+        package_type: npm
+        url: https://registry.npmjs.org
+        share_with:
+          all: true
+          read_only: false
+      # Niche remotes: an explicit list documents in Git who consumes it.
+      shared-gradle-plugins-remote:
+        type: remote
+        package_type: maven
+        url: https://plugins.gradle.org/m2
+        share_with:
+          projects: [team-x]
+          read_only: false
+      # Registry entry points for the Kubernetes clusters, one per stage. A
+      # virtual may only include repos assigned to or shared with this
+      # project, so each team shares its docker locals with 'shared' (see
+      # the team files). The member lists are maintained by hand on
+      # purpose: adding a team is a couple of reviewable lines here. Add
+      # shared-docker-remote if the clusters must also pull external images
+      # directly.
+      #
+      # The dev virtual contains everything, including prod locals, so
+      # promoted images can also be spun up in dev. The prod virtual lists
+      # only *-prod-local repos: the prod clusters can pull promoted images
+      # and nothing else.
+      shared-docker-dev-virtual:
+        type: virtual
+        package_type: docker
+        description: "Registry for the dev clusters: all team images"
+        repositories:
+          - team-x-docker-dev-local
+          - team-x-docker-prod-local
+          - team-y-docker-dev-local
+          - team-y-docker-prod-local
+      shared-docker-prod-virtual:
+        type: virtual
+        package_type: docker
+        description: "Registry for the prod clusters: promoted images only"
+        repositories:
+          - team-x-docker-prod-local
+          - team-y-docker-prod-local

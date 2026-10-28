@@ -1,0 +1,5 @@
+# Commits to skip in git blame: formatting-only changes, one full hash per
+# line. Use once per clone: git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Only list commits that change formatting and nothing else (for example a
+# re-format after a ruff upgrade); a mixed commit would hide real changes.
