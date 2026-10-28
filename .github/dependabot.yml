@@ -1,0 +1,42 @@
+# Automatic update PRs. The lint tools are also pinned in
+# .pre-commit-config.yaml, which Dependabot does not read: after merging a
+# lint-tools PR, run `pre-commit autoupdate` to bring the hook revs along.
+version: 2
+updates:
+  # requests/PyYAML (runtime) and the pinned lint tools in pyproject.toml.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait three days after a release before proposing it, so a broken or
+    # quickly yanked version never reaches a PR.
+    cooldown:
+      default-days: 3
+    groups:
+      lint-tools:
+        patterns:
+          - ruff
+          - mypy
+          - bandit
+          - codespell
+          - types-*
+
+  # Base image in the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait three days after a release before proposing it, so a broken or
+    # quickly yanked version never reaches a PR.
+    cooldown:
+      default-days: 3
+
+  # actions/checkout, actions/setup-python in .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    # Wait three days after a release before proposing it, so a broken or
+    # quickly yanked version never reaches a PR.
+    cooldown:
+      default-days: 3

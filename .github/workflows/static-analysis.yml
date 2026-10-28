@@ -1,0 +1,46 @@
+name: Static analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# One job per tool so a failure names the tool. The versions come from the
+# lint dependency group in pyproject.toml, the same ones pre-commit uses.
+jobs:
+  lint:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [ruff, mypy, bandit, codespell]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install --group lint
+      - name: Run ${{ matrix.check }}
+        run: |
+          case "${{ matrix.check }}" in
+            ruff)
+              ruff check artiform tests
+              ruff format --check artiform tests
+              ;;
+            mypy)
+              mypy
+              ;;
+            bandit)
+              bandit -c pyproject.toml -q -r artiform
+              ;;
+            codespell)
+              codespell
+              ;;
+          esac

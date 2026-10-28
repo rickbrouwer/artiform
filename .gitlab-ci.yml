@@ -1,0 +1,57 @@
+# CI of the ArtiForm repo itself: unit tests and static analysis.
+# Deliberately generic (public repo): operators layer their own base image
+# mirror, CA bundle and pipeline templates on top.
+
+image: python:3.12-slim
+
+stages:
+  - test
+  - lint
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+# pip >= 25.1 is needed for --group (PEP 735 dependency groups).
+default:
+  before_script:
+    - python -m pip install --upgrade pip
+
+# The tests run straight from source: only pytest and the runtime
+# dependencies are installed, the package itself is not (pytest's pythonpath
+# setting makes it importable), so a broken install can never mask a broken
+# source tree.
+pytest:
+  stage: test
+  script:
+    - pip install --group test requests PyYAML
+    - pytest
+
+# needs: [] lets the lint jobs run alongside the tests instead of after them,
+# like the GitHub workflows do.
+.lint:
+  stage: lint
+  needs: []
+  before_script:
+    - !reference [default, before_script]
+    - pip install --group lint
+
+ruff:
+  extends: .lint
+  script:
+    - ruff check artiform tests
+    - ruff format --check artiform tests
+
+mypy:
+  extends: .lint
+  script:
+    - mypy
+
+bandit:
+  extends: .lint
+  script:
+    - bandit -c pyproject.toml -q -r artiform
+
+codespell:
+  extends: .lint
+  script:
+    - codespell

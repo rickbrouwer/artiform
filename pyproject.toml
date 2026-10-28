@@ -1,0 +1,87 @@
+# setuptools instead of hatchling: it is the backend air-gapped environments
+# have preinstalled, so together with --no-build-isolation a pip install
+# needs no index access for the build backend.
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "artiform"
+# Single source of truth for the version; bumped by tbump (see tbump.toml).
+version = "0.1.0"
+description = "Config-as-code for JFrog Artifactory"
+readme = "README.md"
+# Table form on purpose: the PEP 639 string form needs setuptools >= 77,
+# which air-gapped environments may not have preinstalled. setuptools has
+# announced removal of the table form after 2027-02-18; switch to
+# license = "MIT" (and setuptools>=77 in build-system) before then.
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+artiform = "artiform.cli:run"
+
+[dependency-groups]
+test = [
+    "pytest>=8.0",
+]
+# Static analysis, pinned so local runs, pre-commit and CI agree.
+lint = [
+    "ruff==0.14.4",
+    "mypy==1.18.2",
+    "types-requests==2.32.4.20250913",
+    "types-PyYAML==6.0.12.20250915",
+    "bandit==1.8.6",
+    "codespell==2.4.1",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    "pre-commit>=4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Put the repo root on sys.path so the artiform package is importable from
+# source, regardless of how and from where pytest is invoked (pytest >= 7).
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["artiform*"]
+
+[tool.ruff]
+# target-version is inferred from requires-python above.
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "UP",      # pyupgrade
+    "B",       # bugbear
+    "SIM",     # simplify
+]
+ignore = [
+    # The optional hooks of SectionProcessor (validate_entity, index_config,
+    # ...) are deliberately empty non-abstract methods.
+    "B027",
+]
+
+[tool.mypy]
+files = ["artiform"]
+# Check against the oldest supported Python (requires-python), whatever
+# interpreter runs mypy.
+python_version = "3.11"
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "build"]
+
+[tool.codespell]
+skip = "./.venv,./build,./*.egg-info,./.git"
