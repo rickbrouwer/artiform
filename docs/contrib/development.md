@@ -56,6 +56,28 @@ and the action versions, each only after a three-day cooldown since the
 release. It does not read `.pre-commit-config.yaml`: after merging a
 lint-tools PR, run `pre-commit autoupdate` and commit the new hook revs.
 
+## Coding guidelines
+
+- Python 3.11 is the oldest supported version; do not use newer syntax or
+  stdlib features without a fallback. mypy checks against 3.11 whatever
+  interpreter runs it.
+- Config fields are snake_case in YAML and passed through to the APIs as-is
+  (camelCase for `/artifactory` endpoints), so a new REST field normally
+  needs no code.
+- Every change comes with tests. The suite runs against a `FakeClient`
+  (`tests/conftest.py`) that mimics the real server, including its quirks.
+  If a change works around a new API quirk, teach `FakeClient` the same
+  behavior so every test exercises it.
+- Nothing is deleted unless the user opted in with `enforce`. Changes that
+  touch deletion, the dry-run output or the end-of-run summary need extra
+  care and tests; see [Enforce](../enforce.md) for the guarantees users rely
+  on.
+- When behavior changes, update the matching page in `docs/` (one reference
+  page per config section, plain Markdown, no build step), not only the
+  README.
+- Commit messages follow the `type: summary` convention (`feat:`, `fix:`,
+  `docs:`, `chore:`, ...).
+
 ### Blame
 
 Commits that only re-format code (for example after a ruff upgrade changes
