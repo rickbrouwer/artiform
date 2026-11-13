@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 LABEL org.opencontainers.image.title="ArtiForm"
 LABEL org.opencontainers.image.description="Config-as-code for JFrog Artifactory"
