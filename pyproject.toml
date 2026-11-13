@@ -31,12 +31,12 @@ test = [
 ]
 # Static analysis, pinned so local runs, pre-commit and CI agree.
 lint = [
-    "ruff==0.14.4",
-    "mypy==1.18.2",
-    "types-requests==2.32.4.20250913",
-    "types-PyYAML==6.0.12.20250915",
-    "bandit==1.8.6",
-    "codespell==2.4.1",
+    "ruff==0.17.4",
+    "mypy==2.4.1",
+    "types-requests==2.33.0.20261030",
+    "types-PyYAML==6.0.12.20261103",
+    "bandit==1.9.4",
+    "codespell==2.4.3",
 ]
 dev = [
     { include-group = "test" },
