@@ -28,7 +28,8 @@ Behavior:
 - A project that does not exist is created; an existing one is updated.
   Updates apply your fields on top of the current server state, so settings
   managed outside ArtiForm are preserved.
-- If creating a project fails, its sections are skipped for that run (they
-  would all fail anyway) and the run continues with the next project.
+- If a project cannot be looked up or created, its sections are skipped for
+  that run (they would all fail anyway) and the run continues with the next
+  project.
 - Deleting projects is only done by
   [`enforce_projects`](../enforce.md#whole-projects).

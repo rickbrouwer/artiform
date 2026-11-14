@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import ClassVar
@@ -189,21 +190,50 @@ class SectionProcessor(ABC):
         name: str,
         action: str,
         dry_run: bool,
-        operation,
+        operation: Callable[[], None],
         details: str = "",
     ) -> None:
-        label = f"{project_key}/{self.section}/{name}"
-        suffix = f" ({details})" if details else ""
-        symbol = ACTION_SYMBOLS.get(action, "?")
-        if dry_run:
-            logger.info("DRY-RUN %s would %s %s%s", symbol, action, label, suffix)
-            changes.append(Change(self.section, name, action, details, project=project_key))
-            return
-        try:
-            operation()
-        except ArtiformError as exc:
-            logger.error("❌ Failed to %s %s: %s", action, label, exc)
-            changes.append(Change(self.section, name, action, str(exc), error=True, project=project_key))
-            return
-        logger.info("%s %s %s%s", symbol, action.upper(), label, suffix)
-        changes.append(Change(self.section, name, action, details, project=project_key))
+        apply_change(
+            changes,
+            label=f"{project_key}/{self.section}/{name}",
+            section=self.section,
+            name=name,
+            action=action,
+            dry_run=dry_run,
+            operation=operation,
+            project=project_key,
+            details=details,
+        )
+
+
+def apply_change(
+    changes: list[Change],
+    *,
+    label: str,
+    section: str,
+    name: str,
+    action: str,
+    dry_run: bool,
+    operation: Callable[[], None],
+    project: str,
+    details: str = "",
+) -> bool:
+    """Run (or, in dry-run, only announce) one change and record it in
+    changes. Returns False when the operation raised; the error is recorded
+    as a failed Change instead of escaping, so one entity never aborts the
+    rest of the run."""
+    suffix = f" ({details})" if details else ""
+    symbol = ACTION_SYMBOLS.get(action, "?")
+    if dry_run:
+        logger.info("DRY-RUN %s would %s %s%s", symbol, action, label, suffix)
+        changes.append(Change(section, name, action, details, project=project))
+        return True
+    try:
+        operation()
+    except ArtiformError as exc:
+        logger.error("❌ Failed to %s %s: %s", action, label, exc)
+        changes.append(Change(section, name, action, str(exc), error=True, project=project))
+        return False
+    logger.info("%s %s %s%s", symbol, action.upper(), label, suffix)
+    changes.append(Change(section, name, action, details, project=project))
+    return True
