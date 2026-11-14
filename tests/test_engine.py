@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from artiform.config import ArtifactorySettings, Config, ProjectConfig
@@ -237,6 +239,34 @@ def test_failed_project_create_skips_its_sections(client):
     assert client.repos == {}
 
 
+def test_project_lookup_error_skips_its_sections_and_is_isolated(client, caplog):
+    # A failing GET on the project (not a failed create) must skip its
+    # sections, be recorded as an error and not stop the other projects.
+    def boom(project_key):
+        if project_key == "team-a":
+            raise ApiError(500, "backend unavailable")
+        return client.projects.get(project_key)
+
+    client.get_project = boom
+    config = make_config(
+        {
+            "team-a": project(
+                "team-a",
+                sections={"repositories": {"team-a-docker": {"type": "local", "package_type": "docker"}}},
+            ),
+            "team-b": project("team-b"),
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="artiform"):
+        result = Engine(config, client).run()
+
+    assert result.failed
+    assert result.errors == ["project team-a: backend unavailable"]
+    assert client.called("create_repository") == []
+    assert "team-b" in client.projects
+    assert "skipped: project team-a is not available" in caplog.text
+
+
 def test_section_error_does_not_stop_other_projects(client):
     config = make_config(
         {
@@ -275,8 +305,6 @@ def test_enforce_projects_api_error_is_isolated(client):
 
 
 def test_projects_are_announced_with_progress_counter(client, caplog):
-    import logging
-
     caplog.set_level(logging.INFO)
     config = make_config({f"team-{i}": project(f"team-{i}") for i in range(1, 12)})
     Engine(config, client).run()
@@ -288,8 +316,6 @@ def test_projects_are_announced_with_progress_counter(client, caplog):
 
 
 def test_progress_counter_counts_only_filtered_projects(client, caplog):
-    import logging
-
     caplog.set_level(logging.INFO)
     config = make_config({"a": project("a"), "b": project("b"), "c": project("c")})
     Engine(config, client, only_projects=["b"]).run()

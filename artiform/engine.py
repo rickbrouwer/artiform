@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 
@@ -7,7 +8,7 @@ from artiform.config import Config, ProjectConfig
 from artiform.diff import changed_fields, needs_update
 from artiform.exceptions import ArtiformError, ConfigError
 from artiform.processors import SECTION_PROCESSORS
-from artiform.processors.base import ACTION_SYMBOLS, Change
+from artiform.processors.base import Change, apply_change
 from artiform.util import deep_merge
 
 logger = logging.getLogger("artiform")
@@ -91,18 +92,14 @@ class Engine:
         # Phase 1: every project entity first, so that cross-project
         # references in the sections (a share to another project, a virtual
         # over another project's repositories) never fail because the other
-        # project does not exist yet, whatever the config order.
+        # project does not exist yet, whatever the config order. Project
+        # Sharing can be mutual, so this cannot be solved by ordering alone.
         ready: set[str] = set()
         logger.info("* Ensuring %d project(s) exist", len(projects))
         for key, project in projects.items():
             try:
                 if self._ensure_project(project, result):
                     ready.add(key)
-                else:
-                    logger.warning(
-                        "Skipping sections of project %s because it could not be created",
-                        key,
-                    )
             except ArtiformError as exc:
                 logger.error("Project %s failed: %s", key, exc)
                 result.errors.append(f"project {key}: {exc}")
@@ -115,13 +112,9 @@ class Engine:
         for number, (key, project) in enumerate(projects.items(), start=1):
             logger.info("* (%*d/%d) Processing project: %s", width, number, total, key)
             if key not in ready:
-                logger.warning("  skipped: the project could not be created")
+                logger.warning("  skipped: project %s is not available (see the error above)", key)
                 continue
-            try:
-                self._process_sections(project, result)
-            except ArtiformError as exc:
-                logger.error("Project %s failed: %s", key, exc)
-                result.errors.append(f"project {key}: {exc}")
+            self._process_sections(project, result)
 
         if self.config.enforce_projects:
             if self.only_projects:
@@ -175,20 +168,13 @@ class Engine:
 
         current = self.client.get_project(project.key)
         if current is None:
-            return self._record(
-                result,
-                project.key,
-                "create",
-                self.dry_run,
-                lambda: self.client.create_project(desired),
-            )
+            return self._record(result, project.key, "create", lambda: self.client.create_project(desired))
         if needs_update(current, desired):
             details = "; ".join(changed_fields(current, desired))
             self._record(
                 result,
                 project.key,
                 "update",
-                self.dry_run,
                 # PUT is a full update, so apply desired on top of current
                 # to avoid wiping server-side fields not managed in config.
                 lambda: self.client.update_project(project.key, deep_merge(current, desired)),
@@ -217,7 +203,6 @@ class Engine:
                     result,
                     key,
                     "delete",
-                    self.dry_run,
                     partial(self.client.delete_repository, repo),
                     entity=repo,
                     section="repositories",
@@ -227,7 +212,6 @@ class Engine:
                 result,
                 key,
                 "delete",
-                self.dry_run,
                 partial(self.client.delete_project, key),
                 details="not in config (enforce_projects)",
             )
@@ -237,29 +221,27 @@ class Engine:
         result: RunResult,
         project_key: str,
         action: str,
-        dry_run: bool,
-        operation,
+        operation: Callable[[], None],
         entity: str | None = None,
         section: str = "project",
         details: str = "",
     ) -> bool:
         entity = entity or project_key
-        label = f"{section}/{entity}"
-        suffix = f" ({details})" if details else ""
-        symbol = ACTION_SYMBOLS.get(action, "?")
-        if dry_run:
-            logger.info("DRY-RUN %s would %s %s%s", symbol, action, label, suffix)
-            result.changes.append(Change(section, entity, action, details, project=project_key))
-            return True
-        try:
-            operation()
-        except ArtiformError as exc:
-            logger.error("❌ Failed to %s %s: %s", action, label, exc)
-            result.changes.append(Change(section, entity, action, str(exc), error=True, project=project_key))
-            return False
-        logger.info("%s %s %s%s", symbol, action.upper(), label, suffix)
-        result.changes.append(Change(section, entity, action, details, project=project_key))
-        return True
+        # The project entity itself is logged as project/<key> (documented in
+        # docs/running.md); anything else names its project like the
+        # processors do, so an enforce_projects deletion shows the stale owner.
+        label = f"{section}/{entity}" if section == "project" else f"{project_key}/{section}/{entity}"
+        return apply_change(
+            result.changes,
+            label=label,
+            section=section,
+            name=entity,
+            action=action,
+            dry_run=self.dry_run,
+            operation=operation,
+            project=project_key,
+            details=details,
+        )
 
     def _log_summary(self, result: RunResult) -> None:
         applied = [c for c in result.changes if not c.error]
