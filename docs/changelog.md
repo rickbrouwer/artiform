@@ -4,6 +4,18 @@ This changelog follows industry-standard best practices. Each release includes t
 
 ---
 
+## 0.1.1
+
+### Documentation
+
+* restructure CONTRIBUTING around issues and pull requests [#5](https://github.com/rickbrouwer/artiform/pull/5). ([rickbrouwer](https://github.com/rickbrouwer))
+
+### Refactors
+
+* drop redundant error handling and share the change recorder in the engine [#6](https://github.com/rickbrouwer/artiform/pull/6). ([rickbrouwer](https://github.com/rickbrouwer))
+
+Thanks to all the contributors of this release!
+
 ## 0.1.0
 
 ### Features
