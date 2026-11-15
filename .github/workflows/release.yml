@@ -1,8 +1,9 @@
 name: Release
 
 # Runs on the tag that `tbump` pushes (see docs/contrib/releases.md): tests
-# the tagged tree once more, then builds the container image and pushes it to
-# GitHub Container Registry as ghcr.io/<owner>/artiform.
+# the tagged tree once more, builds the container image and pushes it to
+# GitHub Container Registry as ghcr.io/<owner>/artiform, then creates a GitHub
+# Release with the version's changelog section as release notes.
 on:
   push:
     tags: ["v*"]
@@ -69,3 +70,33 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    name: Create GitHub release
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      # The release notes are the changelog section of this version: every
+      # line between the `## <version>` heading (matched on its first two
+      # words, so a date after the version is fine) and the next `## `
+      # heading. A missing or empty section fails the job instead of
+      # publishing an empty release. A re-run of the workflow for a tag that
+      # already has a release (e.g. to rebuild the image) leaves it untouched.
+      - name: Create release from changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '$1=="##" && $2==v {f=1;next} /^## /{f=0} f' docs/changelog.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::no or empty '## $version' section in docs/changelog.md"
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists, leaving it as is"
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

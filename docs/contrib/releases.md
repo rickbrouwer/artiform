@@ -42,5 +42,9 @@ mirrored base image, build it from the tagged source with the same
 3. The tag triggers the `Release` workflow (`.github/workflows/release.yml`):
    it verifies that the tag matches the version in `pyproject.toml`, runs
    the test suite, and builds and pushes the image with the tags listed
-   above. The workflow authenticates with the run's own `GITHUB_TOKEN`; the
-   repository holds no registry credentials.
+   above. Once the image is pushed it creates a GitHub Release for the tag,
+   with the `## <version>` section of the changelog as release notes; the
+   job fails if that section is missing or empty. The workflow
+   authenticates with the run's own `GITHUB_TOKEN`, which only the release
+   job holds with `contents: write`; the repository holds no registry
+   credentials.
