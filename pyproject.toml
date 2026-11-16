@@ -51,7 +51,9 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# A plain `pytest` runs the unit tests; the acceptance tests need a running
+# Artifactory and are started explicitly with `pytest tests/acceptance`.
+testpaths = ["tests/unit"]
 # Put the repo root on sys.path so the artiform package is importable from
 # source, regardless of how and from where pytest is invoked (pytest >= 7).
 pythonpath = ["."]

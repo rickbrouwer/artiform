@@ -1,0 +1,42 @@
+# Disposable Artifactory for the acceptance tests (tests/acceptance). Started
+# by artifactory.sh, locally and in CI; see docs/contrib/development.md.
+#
+# Artifactory OSS: freely pullable, no license. It supports only a fraction of
+# what ArtiForm manages (see the docs), which is why the acceptance tests cover
+# the HTTP layer and the dry-run path.
+#
+# Artifactory 7.16x refuses to start on its embedded Derby database
+# ("Cannot start the application with a database other than PostgreSQL"),
+# hence the PostgreSQL container.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: artifactory
+      POSTGRES_USER: artifactory
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artifactory -d artifactory"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  artifactory:
+    # Pinned (Dependabot proposes updates); keep it on the version the
+    # maintainers run in production, also in docker-compose.pro.yml.
+    image: releases-docker.jfrog.io/jfrog/artifactory-oss:7.161.26
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JF_SHARED_DATABASE_TYPE: postgresql
+      JF_SHARED_DATABASE_DRIVER: org.postgresql.Driver
+      JF_SHARED_DATABASE_URL: jdbc:postgresql://postgres:5432/artifactory
+      JF_SHARED_DATABASE_USERNAME: artifactory
+      JF_SHARED_DATABASE_PASSWORD: password
+    volumes:
+      # Lets artifactory.sh create the admin token with the admin password;
+      # see the file.
+      - ./access.config.patch.yml:/opt/jfrog/artifactory/var/etc/access/access.config.patch.yml:ro
+    ports:
+      - "${ARTIFACTORY_PORT:-8082}:8082"

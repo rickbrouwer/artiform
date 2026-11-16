@@ -31,6 +31,15 @@ updates:
     cooldown:
       default-days: 3
 
+  # Artifactory and PostgreSQL images of the acceptance test stack
+  # (tests/acceptance/docker-compose.yml).
+  - package-ecosystem: docker-compose
+    directory: /tests/acceptance
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+
   # actions/checkout, actions/setup-python in .github/workflows.
   - package-ecosystem: github-actions
     directory: /

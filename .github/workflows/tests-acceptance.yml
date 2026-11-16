@@ -1,0 +1,55 @@
+name: Acceptance Tests
+
+# Runs tests/acceptance against a real Artifactory OSS started in Docker on
+# the runner (tests/acceptance/artifactory.sh). OSS needs no license and no
+# secrets, so this runs on the plain pull_request event, also for pull
+# requests from forks. See docs/contrib/development.md.
+#
+# The job runs in the "Acceptance Tests" GitHub environment, configured with
+# required reviewers (repository Settings > Environments): starting a full
+# Artifactory takes minutes, so the run waits until a maintainer approves it
+# in the pull request ("Review deployments" > "Approve and deploy") instead
+# of running on every push. The gate is about cost, not secrets: the
+# environment holds none.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  artifactory-oss:
+    name: Artifactory OSS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Acceptance Tests
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --group test requests PyYAML
+      - name: Start Artifactory
+        run: |
+          tests/acceptance/artifactory.sh up > artifactory.env
+          token="$(sed -n 's/^ARTIFACTORY_TOKEN=//p' artifactory.env)"
+          echo "::add-mask::$token"
+          cat artifactory.env >> "$GITHUB_ENV"
+      - name: Run acceptance tests
+        run: pytest tests/acceptance -v -rs
+      - name: Artifactory logs
+        if: failure()
+        run: tests/acceptance/artifactory.sh logs
+      - name: Stop Artifactory
+        if: always()
+        run: tests/acceptance/artifactory.sh down
