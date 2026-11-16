@@ -11,9 +11,10 @@ name: Acceptance Tests
 # in the pull request ("Review deployments" > "Approve and deploy") instead
 # of running on every push. The gate is about cost, not secrets: the
 # environment holds none.
+#
+# No push trigger: a merge to main would queue a second run behind the
+# same approval.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
