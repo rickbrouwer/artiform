@@ -79,7 +79,9 @@ the same way it fails the local hook: `tests-unit.yml` runs the tests on
 every supported Python version (3.11 to 3.15), `static-analysis.yml` runs
 ruff, mypy, bandit and codespell. Both run on pull requests and on pushes to
 `main`. `tests-acceptance.yml` runs the [acceptance tests](#acceptance-tests)
-against an Artifactory OSS started in Docker on the runner.
+against an Artifactory OSS started in Docker on the runner, on pull requests
+only (after a maintainer approves the run) and on manual dispatch, not on
+pushes to `main`.
 `release.yml` runs on a version tag and publishes the container image; see
 [Releases](releases.md).
 
