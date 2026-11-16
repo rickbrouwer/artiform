@@ -8,7 +8,7 @@ import artiform
 from artiform import __version__
 from artiform.cli import EXIT_INPUT_ERROR, main
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _pyproject_version() -> str:

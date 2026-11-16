@@ -57,7 +57,9 @@ contributors decide what to build next.
 Open an issue first for anything beyond a small fix, so the approach can be
 agreed on before you spend time on it. Then fork the repository, branch from
 `main` and open a pull request against `main`. CI runs the tests on every
-supported Python version and each linter as a separate job.
+supported Python version and each linter as a separate job. The acceptance
+tests, against an Artifactory OSS started in Docker on the runner, are heavy
+and start once a maintainer approves the run on the pull request.
 
 The articles below cover the rest:
 

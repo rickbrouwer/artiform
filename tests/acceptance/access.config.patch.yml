@@ -1,0 +1,11 @@
+# Applied by the Access service when it starts (mounted by docker-compose.yml).
+#
+# Access rejects basic authentication ("Unsupported authentication method
+# Basic") on every /access endpoint, including the one that creates tokens,
+# and the tokens that /artifactory/api/security/token or the UI login issue
+# are scoped to a single service (audience jfrt@* or jffe@*) and rejected by
+# /access with "Invalid token, audience". This switch is the only way a fresh
+# instance can hand out an admin token over REST, which the tests need because
+# ArtiForm is token-only.
+token:
+  allow-basic-auth: true

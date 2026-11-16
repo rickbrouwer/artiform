@@ -8,7 +8,7 @@ import pytest
 from artiform.config import load_config
 from artiform.engine import Engine
 
-EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
 
 @pytest.fixture(autouse=True)
