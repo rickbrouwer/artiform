@@ -40,23 +40,43 @@ def test_shares_applied_on_create(client, processor):
     ((_, _, payload),) = client.called("create_repository")
     assert "shareWith" not in payload and "share_with" not in payload
     assert client.called("share_repository") == [
-        ("share_repository", "platform-npm-remote", "team-x", True),
-        ("share_repository", "platform-npm-remote", "team-y", True),
+        ("share_repository", "platform-npm-remote", "team-x", False),
+        ("share_repository", "platform-npm-remote", "team-y", False),
     ]
 
 
+def test_read_only_defaults_per_rclass(client, processor):
+    cfg = {
+        "platform-npm-remote": remote_spec(share_with={"projects": ["team-x"]}),
+        "platform-generic-local": {
+            "type": "local",
+            "package_type": "generic",
+            "share_with": {"projects": ["team-x"]},
+        },
+    }
+    changes = processor.process("platform", cfg, dry_run=False)
+
+    assert not any(c.error for c in changes)
+    assert sorted(client.called("share_repository")) == [
+        ("share_repository", "platform-generic-local", "team-x", True),
+        ("share_repository", "platform-npm-remote", "team-x", False),
+    ]
+    cfg["platform-npm-remote"]["share_with"]["read_only"] = True
+    assert processor.desired_entities("platform", cfg)["platform-npm-remote"]["share_with"]["read_only"] is True
+
+
 def test_share_added_and_removed_authoritatively(client, processor):
-    existing_remote(client, {"projects": {"team-x", "team-old"}, "all": False, "read_only": True})
+    existing_remote(client, {"projects": {"team-x", "team-old"}, "all": False, "read_only": False})
     cfg = {"platform-npm-remote": remote_spec(share_with={"projects": ["team-x", "team-new"]})}
     changes = processor.process("platform", cfg, dry_run=False)
 
     assert [(c.action, c.error) for c in changes] == [("update", False)]
     assert client.called("unshare_repository") == [("unshare_repository", "platform-npm-remote", "team-old")]
-    assert client.called("share_repository") == [("share_repository", "platform-npm-remote", "team-new", True)]
+    assert client.called("share_repository") == [("share_repository", "platform-npm-remote", "team-new", False)]
 
 
 def test_unchanged_shares_are_untouched(client, processor):
-    existing_remote(client, {"projects": {"team-x"}, "all": False, "read_only": True})
+    existing_remote(client, {"projects": {"team-x"}, "all": False, "read_only": False})
     cfg = {"platform-npm-remote": remote_spec(share_with={"projects": ["team-x"]})}
     assert processor.process("platform", cfg, dry_run=False) == []
 
@@ -73,13 +93,13 @@ def test_read_only_change_recreates_shares(client, processor):
 
 
 def test_share_with_all_projects(client, processor):
-    existing_remote(client, {"projects": {"team-x"}, "all": False, "read_only": True})
+    existing_remote(client, {"projects": {"team-x"}, "all": False, "read_only": False})
     cfg = {"platform-npm-remote": remote_spec(share_with={"all": True})}
     changes = processor.process("platform", cfg, dry_run=False)
 
     assert not any(c.error for c in changes)
     assert client.called("unshare_repository") == [("unshare_repository", "platform-npm-remote", "team-x")]
-    assert client.called("share_repository_with_all") == [("share_repository_with_all", "platform-npm-remote", True)]
+    assert client.called("share_repository_with_all") == [("share_repository_with_all", "platform-npm-remote", False)]
 
 
 def test_empty_share_with_clears_all_shares(client, processor):
@@ -137,6 +157,9 @@ def test_share_validation_errors(client, processor):
         ({"projects": ["platform"]}, "own project"),
         ({"projectz": ["team-x"]}, "Unknown keys"),
         ({"projects": "team-x"}, "list of project keys"),
+        ({"projects": ["team-x"], "read_only": "false"}, "read_only must be a boolean"),
+        ({"projects": ["team-x"], "read_only": None}, "read_only must be a boolean"),
+        ({"all": "true"}, "all must be a boolean"),
     ):
         with pytest.raises(ConfigError, match=match):
             processor.process(

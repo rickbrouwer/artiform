@@ -57,10 +57,9 @@ projects:
         package_type: npm
         url: https://registry.npmjs.org
         # Optional: share this repo with other projects (authoritative list;
-        # read_only defaults to true and applies to the sharing as a whole).
+        # read_only defaults to true for locals, false for remotes).
         share_with:
           projects: [team-y]
-          read_only: false   # lets consumers trigger upstream fetches
 
     members:
       enforce: true          # memberships not listed here are removed
