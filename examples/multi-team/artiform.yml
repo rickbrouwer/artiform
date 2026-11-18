@@ -27,8 +27,6 @@ projects:
     repositories:
       enforce: true
       # Universal remotes: shared with every project, including future ones.
-      # read_only: false so consumers can trigger upstream fetches of
-      # artifacts that are not cached yet (required on Artifactory < 7.173).
       shared-docker-remote:
         type: remote
         package_type: docker
@@ -37,14 +35,12 @@ projects:
         password: $DOCKER_REMOTE_PASSWORD
         share_with:
           all: true
-          read_only: false
       shared-npm-remote:
         type: remote
         package_type: npm
         url: https://registry.npmjs.org
         share_with:
           all: true
-          read_only: false
       # Niche remotes: an explicit list documents in Git who consumes it.
       shared-gradle-plugins-remote:
         type: remote
@@ -52,7 +48,6 @@ projects:
         url: https://plugins.gradle.org/m2
         share_with:
           projects: [team-x]
-          read_only: false
       # Registry entry points for the Kubernetes clusters, one per stage. A
       # virtual may only include repos assigned to or shared with this
       # project, so each team shares its docker locals with 'shared' (see

@@ -83,7 +83,8 @@ class RepositoriesProcessor(SectionProcessor):
     when present, the configured target projects (or 'all') are
     authoritative and other shares are removed; when absent, sharing is
     left untouched. read_only applies to the repo's sharing as a whole
-    (the API has no per-target flag) and defaults to true.
+    (the API has no per-target flag); defaults to true for locals, false
+    for remotes.
     """
 
     section = "repositories"
@@ -176,12 +177,17 @@ class RepositoriesProcessor(SectionProcessor):
         projects = share_cfg.get("projects") or []
         if not isinstance(projects, list) or not all(isinstance(item, str) for item in projects):
             raise ConfigError(f"{where}.projects must be a list of project keys")
-        all_projects = bool(share_cfg.get("all", False))
+        for flag in ("all", "read_only"):
+            if flag in share_cfg and not isinstance(share_cfg[flag], bool):
+                raise ConfigError(f"{where}.{flag} must be a boolean (true/false), got {share_cfg[flag]!r}")
+        all_projects = share_cfg.get("all", False)
         if all_projects and projects:
             raise ConfigError(f"{where}: 'all' and 'projects' are mutually exclusive")
         if project_key in projects:
             raise ConfigError(f"{where}: a repository cannot be shared with its own project")
-        return _share_state(set(projects), all_projects, bool(share_cfg.get("read_only", True)))
+        # Read on a remote only serves its cache; a read-only share blocks upstream fetches.
+        read_only = share_cfg.get("read_only", rclass != "remote")
+        return _share_state(set(projects), all_projects, read_only)
 
     def current_entities(self, project_key: str, desired: dict[str, dict]) -> dict[str, dict]:
         entities = {}

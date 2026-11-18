@@ -128,13 +128,16 @@ reserved `share_with` key:
 share_with:
   projects: [team-x, team-y]   # explicit consumers, or:
   all: true                    # every project, including future ones
-  read_only: true              # default true; repo-level, not per target
+  read_only: true              # repo-level, not per target
 ```
 
 When `share_with` is present its content is authoritative: shares not listed
 are removed (`share_with: {}` clears all shares). When absent, sharing is
 left untouched. Target project members get access according to their roles in
 their own project, capped to read-only when `read_only` is true.
+
+`read_only` defaults to `true` for local and `false` for remote repositories
+(see [Notes](#notes)).
 
 ### Recommended setup: a platform-owned project for central repositories
 
@@ -162,7 +165,6 @@ projects:
         password: $DOCKER_REMOTE_PASSWORD
         share_with:
           all: true
-          read_only: false   # see note below
       # Niche remotes: an explicit list documents in Git who consumes it.
       shared-gradle-plugins-remote:
         type: remote
@@ -170,7 +172,6 @@ projects:
         url: https://plugins.gradle.org/m2
         share_with:
           projects: [team-x, team-y]
-          read_only: false
 ```
 
 Use `all: true` for remotes everyone needs (new projects are covered
@@ -252,11 +253,11 @@ Notes:
 
 - `read_only` applies to the repo's sharing as a whole; the API has no
   per-target flag. Changing it recreates the shares (unshare + share).
-- For **remote** repos on Artifactory < 7.173: with `read_only: true`,
-  requests through the share do not trigger upstream fetches, so uncached
-  artifacts return 404 for consuming teams. Set `read_only: false` if
-  consumers must be able to pull artifacts that are not cached yet (remotes
-  accept no deploys, so this does not allow writes to the upstream).
+- For **remote** repos, Read only serves the cache; an upstream fetch needs
+  Deploy/Cache ([Permissions](https://docs.jfrog.com/administration/docs/permissions)).
+  With `read_only: true`, consumers get 403 on uncached artifacts (access
+  log: `DENIED DEPLOY <remote>-cache:<path>`), hence the default `false`.
+  Remotes accept no deploys, so this allows no writes to the upstream.
 - Sharing requires Artifactory >= 7.90.1 (`read_only` >= 7.94) and only
   works for local and remote repositories.
 - A share targets a project that must exist. All project entities are
