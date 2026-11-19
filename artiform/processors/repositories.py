@@ -1,11 +1,15 @@
-from artiform.exceptions import ArtiformError, ConfigError
+from artiform.diff import needs_update
+from artiform.exceptions import ApiError, ArtiformError, ConfigError
 from artiform.processors.base import SectionProcessor
+from artiform.processors.repo_xray import current_xray_state, parse_xray_config, xray_payload
 from artiform.util import to_camel, to_snake
 
 # Fixed at creation time by the Repositories API.
 IMMUTABLE_FIELDS = ("rclass", "package_type")
 
 SHARE_KEYS = {"projects", "all", "read_only"}
+# Config keys handled by other APIs than the repository configuration.
+RESERVED_KEYS = ("share_with", "xray")
 # Only local and remote repositories can be shared across projects.
 SHAREABLE_RCLASSES = ("local", "remote")
 
@@ -85,6 +89,10 @@ class RepositoriesProcessor(SectionProcessor):
     left untouched. read_only applies to the repo's sharing as a whole
     (the API has no per-target flag); defaults to true for locals, false
     for remotes.
+
+    'xray' is a reserved key managing the Xray indexing configuration of the
+    repo (retention, path patterns) through the Xray repos_config API; when
+    absent, Xray settings are left untouched.
     """
 
     section = "repositories"
@@ -95,6 +103,9 @@ class RepositoriesProcessor(SectionProcessor):
         # repository configured in this run; see index_config.
         self._configured: dict[str, tuple[str, dict | None]] = {}
         self._dependencies: dict[str, set[str]] = {}
+        # Why Xray cannot be reached, probed once per run; None when it can.
+        self._xray_unavailable: str | None = None
+        self._xray_probed = False
 
     def index_config(self, sections: dict[str, dict]) -> None:
         """Remember who owns every configured repository and with which
@@ -158,6 +169,12 @@ class RepositoriesProcessor(SectionProcessor):
             share_cfg = payload.pop("share_with", None)
             if share_cfg is not None:
                 payload["share_with"] = self._parse_share_config(project_key, repo_key, rclass, share_cfg)
+            xray_cfg = payload.pop("xray", None)
+            if xray_cfg is not None:
+                payload["xray"] = parse_xray_config(project_key, repo_key, rclass, xray_cfg)
+                # Xray only configures repositories it indexes.
+                if payload.setdefault("xray_index", True) is not True:
+                    raise ConfigError(f"{project_key}.repositories.{repo_key}: 'xray' requires xray_index: true")
             entities[repo_key] = payload
         return _order_by_dependency(project_key, entities)
 
@@ -209,12 +226,38 @@ class RepositoriesProcessor(SectionProcessor):
             config = self.client.get_repository(repo_key)
             if config is not None:
                 entities[repo_key] = to_snake(config)
-        # Fetch the sharing state only for repos whose config manages it.
+        # Fetch the sharing and Xray state only for repos whose config manages it.
+        if any("xray" in spec for spec in desired.values()):
+            self._probe_xray()
         for repo_key, spec in desired.items():
-            if "share_with" not in spec or repo_key not in entities:
+            if repo_key not in entities:
                 continue
-            entities[repo_key]["share_with"] = self._current_share_state(repo_key)
+            if "share_with" in spec:
+                entities[repo_key]["share_with"] = self._current_share_state(repo_key)
+            if "xray" in spec and self._xray_unavailable is None:
+                entities[repo_key]["xray"] = self._current_xray_state(repo_key)
         return entities
+
+    def _probe_xray(self) -> None:
+        """Without Xray the repos_config GET answers the same 404 as "repo not
+        configured yet", so a dry-run would plan a clean update that every
+        apply then fails. One version call per run tells the two apart."""
+        if self._xray_probed:
+            return
+        self._xray_probed = True
+        try:
+            self.client.xray_version()
+        except ApiError as exc:
+            self._xray_unavailable = f"Xray is not available: {exc}"
+
+    def _current_xray_state(self, repo_key: str) -> dict | ApiError:
+        # A failing GET must not abort the whole section; the error is kept
+        # in place of the state and reported for this repo by validate_update,
+        # in dry-run too.
+        try:
+            return current_xray_state(repo_key, self.client.get_xray_repo_config(repo_key))
+        except ApiError as exc:
+            return exc
 
     def _current_share_state(self, repo_key: str) -> dict:
         status = self.client.get_repository_project_status(repo_key)
@@ -257,6 +300,8 @@ class RepositoriesProcessor(SectionProcessor):
         """A virtual may only include repositories assigned to or shared with
         its own project. Checked up front (also in dry-run) instead of
         letting the create or update fail on apply."""
+        if "xray" in desired and self._xray_unavailable:
+            raise ArtiformError(f"Repository {name!r} has an 'xray' configuration but {self._xray_unavailable}")
         if desired["rclass"] != "virtual":
             return
         for member in _virtual_members(name, desired):
@@ -310,6 +355,10 @@ class RepositoriesProcessor(SectionProcessor):
         return _shared_with(to_snake(status), project_key), True
 
     def validate_update(self, project_key: str, name: str, desired: dict, current: dict) -> None:
+        if "xray" in desired and self._xray_unavailable:
+            raise ArtiformError(f"Repository {name!r} has an 'xray' configuration but {self._xray_unavailable}")
+        if isinstance(current.get("xray"), ApiError):
+            raise ArtiformError(f"Repository {name!r}: cannot read its Xray configuration: {current['xray']}")
         for field in IMMUTABLE_FIELDS:
             if field in desired and field in current and current[field] != desired[field]:
                 raise ArtiformError(
@@ -319,24 +368,31 @@ class RepositoriesProcessor(SectionProcessor):
                 )
 
     def create_entity(self, project_key: str, name: str, desired: dict) -> None:
-        payload = {k: v for k, v in desired.items() if k != "share_with"}
+        payload = {k: v for k, v in desired.items() if k not in RESERVED_KEYS}
         self.client.create_repository(name, to_camel(payload))
         if "share_with" in desired:
             self._reconcile_shares(name, desired["share_with"], _share_state([], False, None))
+        if "xray" in desired:
+            self.client.set_xray_repo_config(name, xray_payload(desired["xray"]))
 
     def update_entity(self, project_key: str, name: str, desired: dict, current: dict) -> None:
         if current.get("project_key") != project_key:
             self.client.attach_repository(name, project_key, force=True)
         # project_key is silently ignored by the repository update API;
         # attachment above is the only way to move a repo into a project.
-        payload = {k: v for k, v in desired.items() if k not in ("project_key", "share_with")}
-        self.client.update_repository(name, to_camel(payload))
+        payload = {k: v for k, v in desired.items() if k not in ("project_key", *RESERVED_KEYS)}
+        # Each API is only written when its own part drifted: a change to the
+        # shares or the Xray settings alone must not rewrite the repository.
+        if self.entity_needs_update(current, payload):
+            self.client.update_repository(name, to_camel(payload))
         if "share_with" in desired:
             self._reconcile_shares(
                 name,
                 desired["share_with"],
                 current.get("share_with") or _share_state([], False, None),
             )
+        if "xray" in desired and needs_update(current.get("xray") or {}, desired["xray"]):
+            self.client.set_xray_repo_config(name, xray_payload(desired["xray"], current.get("xray")))
 
     def _reconcile_shares(self, repo_key: str, want: dict, have: dict) -> None:
         read_only = want["read_only"]

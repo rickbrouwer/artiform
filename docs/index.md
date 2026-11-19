@@ -14,7 +14,7 @@ reconcile Artifactory against it.
 - Reference, one page per section:
   - [Projects](reference/projects.md)
   - [Repositories](reference/repositories.md) - including generated
-    repositories and sharing with other projects
+    repositories, sharing with other projects and Xray retention
   - [Members](reference/members.md) - users, groups, LDAP import
   - [Cleanup policies](reference/cleanup_policies.md) - "Retention Policies"
     in the Artifactory UI; including generated policies
@@ -41,6 +41,8 @@ entities to close the gap. Three properties shape everything:
 - Package cleanup policies additionally require Artifactory >= 7.98.7 with an
   Enterprise X or Enterprise+ license;
   `included_package_versions` requires >= 7.125.7.
+- The `xray` key of a repository requires Xray; everything else works
+  without it.
 - An access token of a platform admin (see [Running](running.md)).
 
 ## Examples

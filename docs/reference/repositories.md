@@ -7,9 +7,10 @@ the prefix).
 Entities are passed through to the
 [repository configuration REST API](https://jfrog.com/help/r/jfrog-rest-apis/repository-configuration-json),
 so **any field the API supports works**. Write fields in `snake_case`;
-ArtiForm converts to the API's camelCase. Two special keys exist: `type`
-maps to `rclass`, and `share_with` is reserved for
-[sharing](#sharing-repositories-with-other-projects).
+ArtiForm converts to the API's camelCase. Three special keys exist: `type`
+maps to `rclass`, `share_with` is reserved for
+[sharing](#sharing-repositories-with-other-projects) and `xray` for the
+[Xray indexing configuration](#xray-indexing-and-retention).
 
 ## Common fields
 
@@ -25,7 +26,7 @@ repositories:
     notes: "internal notes, visible in the UI"
     includes_pattern: "com/example/**"  # comma-separated ant-style patterns;
     excludes_pattern: "**/*-tmp/**"  # artifacts must match includes and not excludes
-    xray_index: true
+    xray_index: true                 # see "Xray indexing and retention"
     max_unique_snapshots: 10         # maven/gradle/ivy/sbt/nuget/docker
 
   team-x-docker-remote:
@@ -271,6 +272,75 @@ Notes:
   internal remote per project, enabling per-team usage attribution and
   policies). ArtiForm manages direct sharing; project-aware sharing
   currently requires a manual connect step per consuming project in the UI.
+
+## Xray indexing and retention
+
+`xray_index: true` only switches indexing on; Xray then applies its default
+retention (90 days on a default installation). The retention and the path
+patterns that the UI offers under *Xray Settings > Indexed Resources >
+Configure* live in Xray, not in the repository configuration, and are
+managed through the reserved `xray` key. Setting it implies
+`xray_index: true` (`xray_index: false` next to it is a config error);
+virtual repositories cannot be indexed.
+
+```yaml
+team-x-docker-prod-local:
+  xray:
+    retention_in_days: 365           # one retention for the whole repo, or:
+
+team-x-docker-dev-local:
+  xray:
+    patterns:                        # "Scan By Pattern", in order, max 10
+      - include: "core/**"           # ant-style, comma-separated, no leading /
+        exclude: "core/external/**"  # optional
+        retention_in_days: 45        # per pattern
+        index_new_artifacts: true    # default true; false = keep but do not scan
+      - include: "tools/**"
+        retention_in_days: 10
+    all_other_artifacts:             # required with patterns: everything unmatched
+      retention_in_days: 90
+      index_new_artifacts: true
+```
+
+The mapping follows the
+[Xray repository configuration API](https://jfrog.com/help/r/xray-rest-apis/update-repositories-configurations):
+`patterns` and `all_other_artifacts` form its `repo_paths_config`, every other
+key (`retention_in_days`, `vuln_contextual_analysis`, `exposures`, ...) is
+passed through as `repo_config`. `retention_in_days` at the repository level
+and `patterns` are mutually exclusive, because Xray ignores the former as soon
+as patterns are present; this also applies to a `retention_in_days` inherited
+from `defaults.repository.xray`. Retention counts from the moment an artifact
+is scanned; Xray caps it at 1000 days by default.
+
+Like `share_with`, the key is authoritative when present and leaves the Xray
+settings alone when absent, so repositories without an `xray` key keep whatever
+was set in the UI. Drift is detected from
+`GET /xray/api/v1/repos_config/{repo}` and shown in `--dry-run`; a change is
+applied with one `PUT` carrying the whole Xray configuration, only when the
+`xray` block itself drifted (a change to `description` alone does not touch
+Xray, and an Xray-only change does not rewrite the repository). Because the
+`PUT` replaces the configuration, `repo_config` settings that the config does
+not mention (for example exposures enabled in the UI) are read first and sent
+along unchanged.
+
+Notes:
+
+- Requires Xray with a license covering the repository's package type and a
+  token with *Index Resources* (or admin) permission. ArtiForm checks once per
+  run that Xray answers; when it does not, every repository with an `xray`
+  key is reported as a failed change (exit 2), in `--dry-run` too, and nothing
+  of those repositories is changed. Repositories without the key are
+  unaffected.
+- A brand-new repository is created with `xray_index: true` first; if Xray
+  does not know it yet when the configuration is pushed, that repository is
+  reported as failed and the next run applies the configuration as an update.
+- Patterns are authoritative: a repository configured with a repository-wide
+  `retention_in_days` while Xray still holds patterns (set earlier in the UI
+  or in a previous config) is reported as drift on every run, since Xray
+  ignores the retention until the patterns are gone. ArtiForm sends the new
+  retention without a `repo_paths_config`; whether Xray then drops the old
+  patterns depends on the Xray version. If the drift persists, delete the
+  patterns once in the UI.
 
 ## Known behaviors
 

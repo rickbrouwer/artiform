@@ -122,3 +122,43 @@ def test_base_url_trailing_slash_is_stripped(client):
 def test_token_is_sent_as_bearer_header(client):
     assert client.session.headers["Authorization"] == "Bearer my-token"
     assert client.session.auth is None
+
+
+def test_xray_repo_config_endpoints(client, monkeypatch):
+    calls = []
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs.get("json")))
+        return FakeResponse(200, json_data={"repo_name": "x", "repo_config": {"retention_in_days": 90}})
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+    assert client.get_xray_repo_config("team-x-docker-dev-local")["repo_config"] == {"retention_in_days": 90}
+    client.set_xray_repo_config("team-x-docker-dev-local", {"repo_config": {"retention_in_days": 30}})
+    assert calls == [
+        ("GET", "https://fake.example.com/xray/api/v1/repos_config/team-x-docker-dev-local", None),
+        (
+            "PUT",
+            "https://fake.example.com/xray/api/v1/repos_config",
+            {"repo_name": "team-x-docker-dev-local", "repo_config": {"retention_in_days": 30}},
+        ),
+    ]
+
+
+def test_xray_repo_config_404_means_unknown_to_xray(client, monkeypatch):
+    monkeypatch.setattr(client.session, "request", lambda *a, **kw: FakeResponse(404, "not found"))
+    assert client.get_xray_repo_config("team-x-docker-dev-local") is None
+
+
+def test_xray_version_probe(client, monkeypatch):
+    calls = []
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url))
+        return FakeResponse(200, json_data={"xray_version": "3.140.0", "xray_revision": "1"})
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+    assert client.xray_version() == "3.140.0"
+    assert calls == [("GET", "https://fake.example.com/xray/api/v1/system/version")]
+    monkeypatch.setattr(client.session, "request", lambda *a, **kw: FakeResponse(404, "not found"))
+    with pytest.raises(NotFoundError):
+        client.xray_version()

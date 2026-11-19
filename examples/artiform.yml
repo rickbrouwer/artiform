@@ -43,6 +43,18 @@ projects:
         includes_pattern: "com/example/**" # only accept these paths
         excludes_pattern: "**/*-tmp/**"    # ... except these
         max_unique_snapshots: 10
+      team-x-docker-dev-local:
+        # Xray indexing with per-path retention (implies xray_index: true);
+        # without 'patterns', a single 'retention_in_days' covers the repo.
+        xray:
+          patterns:
+            - include: "release/**"
+              exclude: "release/experimental/**"
+              retention_in_days: 180
+            - include: "ci/**"
+              retention_in_days: 7
+          all_other_artifacts:
+            retention_in_days: 30
       team-x-docker-remote:
         type: remote
         package_type: docker
