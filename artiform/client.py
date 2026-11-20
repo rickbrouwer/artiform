@@ -15,10 +15,11 @@ RETRIED_STATUSES = (429, 500, 502, 503, 504)
 
 
 class ArtifactoryClient:
-    """Thin typed wrapper around the Artifactory and Access REST APIs.
+    """Thin typed wrapper around the Artifactory, Access and Xray REST APIs.
 
     The base URL is the platform root (https://host), with the Artifactory
-    API under /artifactory and the Access API under /access.
+    API under /artifactory, the Access API under /access and the Xray API
+    under /xray.
     """
 
     def __init__(
@@ -194,6 +195,20 @@ class ArtifactoryClient:
 
     def unshare_repository_with_all(self, repo_key: str) -> None:
         self._request("DELETE", f"/access/api/v1/projects/_/share/repositories/{repo_key}")
+
+    # -- Xray indexing configuration of a repository (Xray API) -------------------
+
+    def xray_version(self) -> str:
+        """Raises ApiError (404 from the platform router) when Xray is not installed."""
+        return self._get("/xray/api/v1/system/version")["xray_version"]
+
+    def get_xray_repo_config(self, repo_key: str) -> dict | None:
+        """Xray scanning configuration of a repo (retention, path patterns);
+        None when Xray does not know the repo."""
+        return self._get_or_none(f"/xray/api/v1/repos_config/{repo_key}")
+
+    def set_xray_repo_config(self, repo_key: str, payload: dict) -> None:
+        self._request("PUT", "/xray/api/v1/repos_config", json_body={"repo_name": repo_key, **payload})
 
     # -- groups (Access API v2) ------------------------------------------------
 

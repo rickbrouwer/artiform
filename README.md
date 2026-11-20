@@ -12,7 +12,7 @@ file in Git, and let a CI pipeline reconcile Artifactory against it.
 | Section | Artifactory API | Notes |
 |---|---|---|
 | `projects` | `/access/api/v1/projects` | create, update, enforce-delete |
-| `repositories` | `/artifactory/api/repositories` + project attach | per project, any repo type/field, sharing across projects |
+| `repositories` | `/artifactory/api/repositories` + project attach + Xray `repos_config` | per project, any repo type/field, sharing across projects, Xray retention and index patterns |
 | `members` | `/access/api/v1/projects/{key}/users\|groups` | roles per user/group, LDAP group import |
 | `cleanup_policies` | `/artifactory/api/cleanup/packages/policies` | project-scoped package cleanup |
 
@@ -73,7 +73,7 @@ artiform --dry-run            # review, then run without --dry-run
   [Releases](docs/contrib/releases.md) (container image on `ghcr.io`)
 - Reference: [projects](docs/reference/projects.md),
   [repositories](docs/reference/repositories.md) (incl. generators and
-  sharing with other projects), [members](docs/reference/members.md),
+  sharing with other projects, Xray retention), [members](docs/reference/members.md),
   [cleanup policies](docs/reference/cleanup_policies.md)
 
 Complete examples: [examples/artiform.yml](examples/artiform.yml)

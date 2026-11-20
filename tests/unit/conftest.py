@@ -16,7 +16,13 @@ class FakeClient:
         self.groups: dict[str, dict] = {}
         self.memberships: dict[tuple[str, str], dict[str, list[str]]] = {}
         self.policies: dict[str, dict] = {}
+        self.xray_configs: dict[str, dict] = {}
         self.cleanup_api_available = True
+        # None: Xray answers; otherwise every Xray call raises this error
+        # (e.g. NotFoundError when Xray is not installed).
+        self.xray_api_error: ApiError | None = None
+        # repo key -> error raised by the per-repo GET only (e.g. 403).
+        self.xray_config_errors: dict[str, ApiError] = {}
         self.fail_create_project = False
         self.calls: list[tuple] = []
 
@@ -114,6 +120,7 @@ class FakeClient:
         self._record("delete_repository", repo_key)
         del self.repos[repo_key]
         self.repo_shares.pop(repo_key, None)
+        self.xray_configs.pop(repo_key, None)
 
     def attach_repository(self, repo_key, project_key, force=True):
         self._record("attach_repository", repo_key, project_key, force)
@@ -158,6 +165,43 @@ class FakeClient:
     def unshare_repository_with_all(self, repo_key):
         self._record("unshare_repository_with_all", repo_key)
         self._shares(repo_key)["all"] = False
+
+    # -- Xray repository configuration ----------------------------------------------
+
+    def xray_version(self):
+        self._record("xray_version")
+        if self.xray_api_error is not None:
+            raise self.xray_api_error
+        return "3.140.0"
+
+    def get_xray_repo_config(self, repo_key):
+        self._record("get_xray_repo_config", repo_key)
+        if isinstance(self.xray_api_error, NotFoundError):
+            # Like the real client: a 404 reads as "no configuration".
+            return None
+        if self.xray_api_error is not None:
+            raise self.xray_api_error
+        if repo_key in self.xray_config_errors:
+            raise self.xray_config_errors[repo_key]
+        return self.xray_configs.get(repo_key)
+
+    def set_xray_repo_config(self, repo_key, payload):
+        self._record("set_xray_repo_config", repo_key, payload)
+        if self.xray_api_error is not None:
+            raise self.xray_api_error
+        # Only repositories Xray indexes can be configured (the UI offers the
+        # settings on indexed resources only).
+        repo = self.repos.get(repo_key)
+        if repo is None or repo.get("xrayIndex") is not True:
+            raise ApiError(400, f"repository {repo_key} is not indexed by Xray")
+        paths = payload.get("repo_paths_config")
+        if paths is not None:
+            # All pattern fields are mandatory in the API, as is the
+            # all_other_artifacts setting next to patterns.
+            for pattern in paths.get("patterns", []):
+                assert set(pattern) == {"include", "exclude", "index_new_artifacts", "retention_in_days"}, pattern
+            assert "all_other_artifacts" in paths
+        self.xray_configs[repo_key] = {"repo_name": repo_key, **payload}
 
     # -- groups -------------------------------------------------------------------
 
