@@ -4,6 +4,26 @@ This changelog follows industry-standard best practices. Each release includes t
 
 ---
 
+## 0.2.0
+
+### Features
+
+* manage Xray retention and index patterns per repository [#13](https://github.com/rickbrouwer/artiform/pull/13). ([rickbrouwer](https://github.com/rickbrouwer))
+
+### Bug Fixes
+
+* default share read_only to false for remote repositories [#12](https://github.com/rickbrouwer/artiform/pull/12). ([rickbrouwer](https://github.com/rickbrouwer))
+
+### Tests
+
+* acceptance tests against Artifactory OSS [#9](https://github.com/rickbrouwer/artiform/pull/9). ([rickbrouwer](https://github.com/rickbrouwer))
+
+### Dependencies
+
+* Update various dependencies to newer versions.
+
+Thanks to all the contributors of this release!
+
 ## 0.1.1
 
 ### Documentation
