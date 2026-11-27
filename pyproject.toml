@@ -37,10 +37,10 @@ test = [
 ]
 # Static analysis, pinned so local runs, pre-commit and CI agree.
 lint = [
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     "mypy==2.4.1",
     "types-requests==2.33.0.20261030",
-    "types-PyYAML==6.0.12.20261113",
+    "types-PyYAML==6.0.12.20261122",
     "bandit==1.9.4",
     "codespell==2.4.3",
 ]
